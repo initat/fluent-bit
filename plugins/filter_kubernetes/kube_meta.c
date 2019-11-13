@@ -377,14 +377,16 @@ static void extract_container_hash(struct flb_kube_meta *meta,
     msgpack_object k, v;
     int docker_id_len = 0;
     int container_hash_len = 0;
+    int image_len = 0;
     const char *container_hash;
     const char *docker_id;
+    const char *image;
     const char *tmp;
     int tmp_len = 0;
     int name_found = FLB_FALSE;
     /* Process status/containerStatus map for docker_id, container_hash */
     for (i = 0;
-         (meta->docker_id_len == 0 || meta->container_hash_len == 0) &&
+         (meta->docker_id_len == 0 || meta->container_hash_len == 0 || meta->image_len == 0) &&
          i < status.via.map.size; i++) {
         k = status.via.map.ptr[i].key;
         if ((k.via.str.size == FLB_KUBE_META_CONTAINER_STATUSES_KEY_LEN &&
@@ -399,7 +401,7 @@ static void extract_container_hash(struct flb_kube_meta *meta,
             v = status.via.map.ptr[i].val;
             for (j = 0;
                  (meta->docker_id_len == 0 ||
-                  meta->container_hash_len == 0) && j < v.via.array.size;
+                  meta->container_hash_len == 0 || meta->image_len == 0) && j < v.via.array.size;
                  j++) {
                 int l;
                 msgpack_object k1, k2;
@@ -407,7 +409,7 @@ static void extract_container_hash(struct flb_kube_meta *meta,
                 k1 = v.via.array.ptr[j];
                 for (l = 0;
                      (meta->docker_id_len == 0 ||
-                      meta->container_hash_len == 0) &&
+                      meta->container_hash_len == 0 || meta->image_len == 0) &&
                      l < k1.via.map.size; l++) {
                     k2 = k1.via.map.ptr[l].key;
                     v2 = k1.via.map.ptr[l].val.via.str;
@@ -441,6 +443,11 @@ static void extract_container_hash(struct flb_kube_meta *meta,
                             container_hash_len = tmp_len;
                         }
                     }
+                    else if (k2.via.str.size == sizeof("image") - 1 &&
+                         strncmp(k2.via.str.ptr, "image", k2.via.str.size) == 0) {
+                        image = v2.ptr;
+                        image_len = v2.size;
+                    }
                 }
                 if (name_found) {
                     if (container_hash_len && !meta->container_hash_len) {
@@ -452,6 +459,11 @@ static void extract_container_hash(struct flb_kube_meta *meta,
                     if (docker_id_len && !meta->docker_id_len) {
                         meta->docker_id_len = docker_id_len;
                         meta->docker_id = flb_strndup(docker_id, docker_id_len);
+                        meta->fields++;
+                    }
+                    if (image && !meta->image_len) {
+                        meta->image_len = image_len;
+                        meta->image = flb_strndup(image, image_len);
                         meta->fields++;
                     }
                     return;
@@ -583,6 +595,7 @@ static int merge_meta(struct flb_kube_meta *meta, struct flb_kube *ctx,
 
             /* Process spec map value for nodeName */
             if (spec_found == FLB_TRUE) {
+
                 for (i = 0; i < spec_val.via.map.size; i++) {
                     k = spec_val.via.map.ptr[i].key;
                     if (k.via.str.size == 8 &&
@@ -594,7 +607,7 @@ static int merge_meta(struct flb_kube_meta *meta, struct flb_kube *ctx,
                 }
             }
 
-            if ((!meta->container_hash || !meta->docker_id) && status_found) {
+            if ((!meta->container_hash || !meta->docker_id || !meta->image) && status_found) {
                 extract_container_hash(meta, status_val);
             }
         }
@@ -651,6 +664,13 @@ static int merge_meta(struct flb_kube_meta *meta, struct flb_kube *ctx,
         msgpack_pack_object(&mp_pck, v);
     }
 
+    if (meta->image != NULL) {
+        msgpack_pack_str(&mp_pck, 5);
+        msgpack_pack_str_body(&mp_pck, "image", 5);
+        msgpack_pack_str(&mp_pck, meta->image_len);
+        msgpack_pack_str_body(&mp_pck, meta->image,
+                              meta->image_len);
+    }
     if (meta->container_name != NULL) {
         msgpack_pack_str(&mp_pck, 14);
         msgpack_pack_str_body(&mp_pck, "container_name", 14);
@@ -1093,6 +1113,11 @@ int flb_kube_meta_release(struct flb_kube_meta *meta)
 
     if (meta->docker_id) {
         flb_free(meta->docker_id);
+        r++;
+    }
+
+    if (meta->image) {
+        flb_free(meta->image);
         r++;
     }
 

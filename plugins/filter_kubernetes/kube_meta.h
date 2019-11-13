@@ -34,13 +34,14 @@ struct flb_kube_meta {
     int container_name_len;
     int docker_id_len;
     int container_hash_len;
+    int image_len;
 
     char *namespace;
     char *podname;
     char *container_name;
     char *docker_id;
-
     char *container_hash;   /* set only on Systemd mode */
+    char *image;
 
     char *cache_key;
 };
