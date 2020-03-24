@@ -343,9 +343,13 @@ int net_io_tls_handshake(void *_u_conn, void *_th)
     u_conn->tls_session = session;
     u_conn->tls_net_context.fd = u_conn->fd;
 
+    //mbedtls_ssl_set_bio(&session->ssl,
+    //                    &u_conn->tls_net_context,
+    //                    mbedtls_net_send, mbedtls_net_recv, NULL);
+    mbedtls_ssl_conf_read_timeout(&session->conf, 10000);
     mbedtls_ssl_set_bio(&session->ssl,
                         &u_conn->tls_net_context,
-                        mbedtls_net_send, mbedtls_net_recv, NULL);
+                        mbedtls_net_send, NULL, mbedtls_net_recv_timeout);
 
  retry_handshake:
     ret = mbedtls_ssl_handshake(&session->ssl);
