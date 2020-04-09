@@ -502,8 +502,8 @@ static int stackdriver_format(const void *data, size_t bytes,
     struct tm tm;
     struct flb_time tms;
     severity_t severity;
-    flb_sds_t container_name;
-    flb_sds_t namespace_name;
+    flb_sds_t container_name = NULL;
+    flb_sds_t namespace_name = NULL;
 
     msgpack_object *obj;
     msgpack_unpacked result;
